@@ -1,3 +1,3 @@
 # STM32-IntermittentSecurity
 
-test for anonymous repository
+Main code is provided in the Inc and Src folders. Full documentation will be added shortly.
