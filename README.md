@@ -1,12 +1,34 @@
 # STM32-IntermittentSecurity
 This repository constains a secure checkpoint utility for intermittent computing systems based on STM32U5, featuring ARM Trustzone for Cortex-M.
 
+## Index
+
+1. [Features](#features)
+2. [Hardware](#hardware)
+3. [Software](#software)
+4. [Testing](#testing)
+5. [Caveats](#caveats)
+
+
 
 ## Features
-### Talk about features and limitations of the implementation
+This utility allows to securely checkpoint and the state of secure world (peripheral state excluded).
 
-## Repository structure
-### Tree view of the repository
+Selectable confidentiality for global variables in the .data and .bss sections is available via compiler attributes. The stack, instead, is only authenticated.
+
+Checkpoint and restoration utilities are invoked via system calls.
+After a successfull restoration, the *restore* system call exists as if it was the *checkpoint* system call that generated the checkpoint.
+
+There are some limitations:
+- no peripheral state is checkpointed.
+- non-secure world is not checkpointed.
+- stack is not authenticated but not encrypted.
+- heap is not checkpointed.
+- interrupts may interfere with the checkpoint creation and restoration routines.
+- flash page clearance for checkpoint nonces is currently not implemented.
+- secure boot functionalities are not implemented.
+- code is not optimized (e.g. using DMA functionalities)
+
 
 
 ## Hardware
@@ -20,9 +42,11 @@ The interface is avaiable from the ARDUINO connectors on the back of the board.
 These are described at page 32 of the board's [user manual](https://www.st.com/resource/en/user_manual/um2839-discovery-kit-for-iot-node-with-stm32u5-series-stmicroelectronics.pdf).
 The ARDUINO connectors also provide GND and 3.3V power for the memory chip.
 
-Tie the DNU and WP pins of the chip to VDD. Tieing WP to VDD disables write protection functionalities, which are required for this project.
+Tie the DNU and WP pins of the memory chip to VDD. Tieing WP to VDD disables write protection functionalities, which are required for this project.
 
-### UART connection
+The USART3 interface is required for the test.
+This is also accessible from the ARDUINO connectors.
+This will be configured and used as a UART interface, and used to log the measured clock cycles.
 
 ## Software
 The solution was developed using [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html), therefore the instruction are provided for this development enviroment.
@@ -30,7 +54,13 @@ Copyrighted code by STMicroelectronics is not included in this repository, but t
 
 
 ### Board configuration
-Enable Trustzone via option bytes
+Board options bytes must be configured to activate Trustzone and define the default secure/non-secure flash memory partition.
+This can be done connecting to the board via [STM32CubeProgrammer](https://www.st.com/en/development-tools/stm32cubeprog.html).
+
+The configuration that works for this project is:
+- *TZEN=1* (all memory is secure)
+- *SECWM1_PSTRT=0x0* and *SECWM1_PEND=0x7F* (meaning all 128 pages of Bank1 set as secure)
+- *SECWM2_PSTRT=0x7F* and *SECWM2_PEND=0x0* (meaning all 128 pages of Bank2 set as non-secure)
 
 ### Project configuration
 Using [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html), create a new *STM32 project*.
@@ -43,7 +73,6 @@ An *.ioc* file is generated inside the home of the project
 It opens a graphical interface that can be used to automatically generate configuration code for the microcontroller.
 
 ### Flash configuration
-
 Open the *.ioc* and enter the *Tools* page.
 A picture of the address space should appear.
 
@@ -69,7 +98,7 @@ In the *Parameter settings* menu specify the following parameters. The memory is
 - Prescaler -> *8* (to achieve a 20 Mbit/s baud rate)
 - Configure SPI mode 0:
   - Clock Polarity (CPOL) -> *0* (idle low)
-  - Clock Phase (CPHA) -> *0* (edge one of clock, rasing or falling depends on polarity)
+  - Clock Phase (CPHA) -> *0* (edge one of clock, raising or falling depends on polarity)
 - NSSP Mode -> *disabled* (no chip select pulses in between data frames, [ref](https://www.st.com/content/ccc/resource/training/technical/product_training/group0/3e/ee/cd/b7/84/4b/45/ee/STM32F7_Peripheral_SPI/files/STM32F7_Peripheral_SPI.pdf/_jcr_content/translations/en.STM32F7_Peripheral_SPI.pdf))
 - *Leave others as default*
 
@@ -96,7 +125,6 @@ Find PE12 and change its configuration to the following:
 - Maximum output speed -> *Low*
 - User label -> *SPI1_CS*
 
-
 ### Crypto modules
 From *Pinout & Configuration* enter the *Security* section and configure both the RNG, SAES and AES modules as follows:
 - Runtime context -> *Cortex-M33 secure*
@@ -104,49 +132,66 @@ From *Pinout & Configuration* enter the *Security* section and configure both th
 
 Leave al the other parameters as default, as they will be configured with custom code.
 
+### UART interface
+From *Pinout & Configuration* enter the *Connectivity* section and configure USART3 as follows:
+
+- Runtime context -> *Cortex-M33 secure*
+- Mode -> *Asyncronous*
+- Hardware Flow Control (RS232) -> *disable*
+- Hardware RDY signal -> *disable*
+
+In the Parameter settings menu specify the following parameters:
+- baud rate to 9600 (tested with this)
+- *Leave others as default*
+
+Using the Pinout view, attribute the MCU pins as follows:
+- PD8 -> *USART3_TX*
+- PD9 -> *USART3_RX*
+
+Check this change in the *GPIO setting* section.
+
+
+
 ### Code generation
 Save the *.ioc* file to peform code generation.
 This will add code to the project that performs the configuration specified via the graphical interface.
 
-
 ### Checkpoint utility
+Copy the content of the *Inc* folder inside the *Core/Inc* folder in the secure project.
 
+Copy the content of the *Src* folder, **EXCEPT** the *changes* subfolder, inside the *Core/Src* folder in the secure project.
 
+The *changes* subfolder contains files that are already in the project and need to be modified.
+Perform the modifications as explained in the files.
 
-
+The *FLASH.ld* file contains the modification to be performed to the linker script of the secure project.
+Perform these modifications.
 
 ### Build and run
+To build both images, right-click on the non-secure project and select *Build Project*.
 
+Once the images are build, create a new debug configuration, selecting as the main image the secure image (this must be run first).
+Then, in the startup section of the debug configuration menu, click on add and select the non-secure image.
 
-## Test
+## Testing
+All code is run in secure world before jumping to non-secure.
 
+In the *ckp_test.h*, via defines, is possible to select whether to run the overall test or the microbenchmark, which logs the time for the single checkpoint operations.
 
+By changing the experiment number, the code will increase the size of the of an array in the .bss section, simulating and increased memory size.
+Some experiment make the array confidential.
+Detail of the experiment are in the *ckp_test_perf.c* file.
 
+If the code work, it ends up in a restore loop, continuosly logging the performance metrics of the restoration utility.
 
-
-
-
-
-
-## Other stuff
-
-
-- Configure UART
-	- ***ADD LINK**
-
-- Build project
-	- right click on 
-- Configure RUN/DEBUG
-	- build project NON SECURE
-		- it builds both
-	- confb
-	- 
-
-
-## Caveats and problems
-- test after *SystemClock_Config()* (otherwise slow startup clock is used)
-- frequency not higher than 20 MHz
-- all gpio output speed to low (even if the max frequency should be lower than 20 MHz for this configuration, according to datasheet)
+## Caveats
+Some additional information in not particular order:
+- *SystemClock_Config()* must be performed at boot in secure world (this should be set automatically when the RNG is configured).
+- External memory
+	- In our setup the max FRAM memory frequency achievable was 20 MHz.
+	- All GPIO output speed were set to low. Higher speed did not work.
+	- We ofter encountered problem with corrupted reads from the memory when jumpers were not making a good connection.
+	- A custom PCB should help solve these problems
 
 
 

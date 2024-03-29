@@ -2,6 +2,8 @@
 #include "fram.h"
 #include "ckp_mem.h"
 #include "flash.h"
+#include "ckp_dwt.h"
+#include "ckp_test.h"
 
 #define TIMEOUT_VALUE 	  0xFF
 #define PLAINTEXT_SIZE    4 /* Plaintext size in Words */
@@ -17,6 +19,8 @@ static uint32_t pInitVectAES[4] DRIVER_DATA = {0xB3D8CC01,0x7CBB89B3,0x9E0F67E2,
 // SAES
 static uint32_t pInitVectSAES[4] = {0x00010203,0x04050607,0x08090A0B,0x0C0D0E0F};
 static uint32_t Encryptedkey[4];
+
+uint32_t tags[12] DRIVER_BSS;
 
 // information for correct checkpointing
 static volatile uint32_t stack_len = 0;
@@ -42,16 +46,6 @@ static int32_t GCM_AES_Shared_Init(void);
 static void copy_mem(uint32_t addr_src, uint32_t addr_dest, uint32_t size);
 
 
-uint8_t buf_data_before[300] DRIVER_BSS;
-uint8_t buf_data_after[300] DRIVER_BSS;
-
-
-uint8_t crypto_data_before[300] DRIVER_BSS;
-uint8_t crypto_data_after[300] DRIVER_BSS;
-
-
-uint32_t tags_before[12] DRIVER_BSS;
-uint32_t tags_after[12] DRIVER_BSS;
 
 
 int32_t write_ckp_fram(uint32_t stack_ptr)
@@ -64,73 +58,150 @@ int32_t write_ckp_fram(uint32_t stack_ptr)
 	stack_len = CKP_ESTACK - stack_ptr + 1; 	// update stack length
 
 
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	if (generateIV(pInitVectAES) != 0) {
 		return -1;
 	}
 	IV_start = pInitVectAES[2];
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_GEN_IV);
+#endif
 
 
-//	__disable_irq();
-//	// copy driver status (must be done before any operation)
-//	copy_mem(CKP_SDATA, CKP_SDATA_CONF, CKP_SDATA_CONF - CKP_SDATA);
-//	copy_mem(CKP_SBSS, CKP_SBSS_CONF, CKP_SBSS_CONF - CKP_SBSS);
-//	__enable_irq();
 
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	__disable_irq();
+	// copy driver status (must be done before any operation)
+	copy_mem(CKP_SDATA, CKP_SDATA_CONF, CKP_SDATA_CONF - CKP_SDATA);
+	copy_mem(CKP_SBSS, CKP_SBSS_CONF, CKP_SBSS_CONF - CKP_SBSS);
+	__enable_irq();
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_CPY_DRIVERS);
+#endif
 
-	copy_mem(CKP_EDATA_CONF, (uint32_t)buf_data_before, CKP_EDATA - CKP_EDATA_CONF);
 
 	// reserve space for tags (3 tags of 128 bit (16 bytes) each)
 	fram_ptr += 48;
 
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// save .data, generate tag
 	if (CY15X102QN_Write(&hspi1, (uint8_t *)CKP_EDATA_CONF, CKP_EDATA - CKP_EDATA_CONF, fram_ptr) != 0) {
 		return -1;
 	}
-	if (crypto_AuthEncrypt((uint8_t *)CKP_EDATA_CONF, CKP_EDATA - CKP_EDATA_CONF, (uint8_t *)CKP_SDATA_CONF, CKP_EDATA_CONF - CKP_SDATA_CONF, (uint8_t *)CKP_SCRYPTOBUF, &tags_before[0]) != 0) {
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_SPI_DATA);
+#endif
+
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	if (crypto_AuthEncrypt((uint8_t *)CKP_EDATA_CONF, CKP_EDATA - CKP_EDATA_CONF, (uint8_t *)CKP_SDATA_CONF, CKP_EDATA_CONF - CKP_SDATA_CONF, (uint8_t *)CKP_SCRYPTOBUF, &tags[0]) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_AUTH_DATA);
+#endif
+
+
 	pInitVectAES[2] += 1;
 	fram_ptr += (CKP_EDATA - CKP_EDATA_CONF);
 
 
-	//copy_mem(CKP_SDATA_CONF, (uint32_t)buf_data_after, CKP_EDATA - CKP_SDATA_CONF);
-	copy_mem(CKP_SCRYPTOBUF, (uint32_t)crypto_data_before, CKP_ECRYPTOBUF_DATA - CKP_SCRYPTOBUF);
-
-
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// save .bss, generate tag
 	if (CY15X102QN_Write(&hspi1, (uint8_t *)CKP_EBSS_CONF, CKP_EBSS - CKP_EBSS_CONF, fram_ptr) != 0) {
 		return -1;
 	}
-	if (crypto_AuthEncrypt((uint8_t *)CKP_EBSS_CONF, CKP_EBSS - CKP_EBSS_CONF, (uint8_t *)CKP_SBSS_CONF, CKP_EBSS_CONF - CKP_SBSS_CONF, (uint8_t *)CKP_ECRYPTOBUF_DATA, &tags_before[4]) != 0) {
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_SPI_BSS);
+#endif
+
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	if (crypto_AuthEncrypt((uint8_t *)CKP_EBSS_CONF, CKP_EBSS - CKP_EBSS_CONF, (uint8_t *)CKP_SBSS_CONF, CKP_EBSS_CONF - CKP_SBSS_CONF, (uint8_t *)CKP_ECRYPTOBUF_DATA, &tags[4]) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_AUTH_BSS);
+#endif
+
 	pInitVectAES[2] += 1;
 	fram_ptr += (CKP_EBSS - CKP_EBSS_CONF);
 
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// save .cryptobuf
 	if (CY15X102QN_Write(&hspi1, (uint8_t *)CKP_SCRYPTOBUF, CKP_ECRYPTOBUF - CKP_SCRYPTOBUF, fram_ptr) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_SPI_CRYPTO);
+#endif
+
+
 	fram_ptr += (CKP_ECRYPTOBUF - CKP_SCRYPTOBUF);
 
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// save stack, generate tag
 	if (CY15X102QN_Write(&hspi1, (uint8_t *)stack_ptr, stack_len, fram_ptr) != 0) {
 		return -1;
 	}
-	if (crypto_AuthEncrypt((uint8_t *)stack_ptr, stack_len, NULL, 0, NULL, &tags_before[8]) != 0) {
-		return -1;
-	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_SPI_STACK);
+#endif
 
-	// save tags
-	if (CY15X102QN_Write(&hspi1, (uint8_t *)tags_before, 48, 0) != 0) {
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	if (crypto_AuthEncrypt((uint8_t *)stack_ptr, stack_len, NULL, 0, NULL, &tags[8]) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_AUTH_STACK);
+#endif
+
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	// save tags
+	if (CY15X102QN_Write(&hspi1, (uint8_t *)tags, 48, 0) != 0) {
+		return -1;
+	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_SPI_TAGS);
+#endif
 
 	// save IV in flash
 	pInitVectAES[2] = IV_start;
+
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	if (saveNonce(pInitVectAES, fram_addr, flash_addr) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_S_FLASH_NONCE);
+#endif
 
 	// update checkpoint information
 	flash_addr += 16;
@@ -146,50 +217,97 @@ int32_t restore_ckp_fram(void)
 	uint32_t fram_ptr_init;
 	uint32_t fram_ptr;			// initialize pointer to fram
 	uint32_t IV_addr;
-//	uint32_t tags[12];			// space for 3 tags
 
-
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// restore checkpoint information
 	if (findNonce(&IV_addr) != 0) {
 		return -1;
 	}
 	restoreNonce(pInitVectAES, &fram_ptr_init, IV_addr);
 	fram_ptr = fram_ptr_init;
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_FLASH_NONCE);
+#endif
 
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// read tags
-	if (CY15X102QN_Read(&hspi1, (uint8_t *)tags_after, 48, fram_ptr) != 0) {
+	if (CY15X102QN_Read(&hspi1, (uint8_t *)tags, 48, fram_ptr) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_SPI_TAGS);
+#endif
+
 	fram_ptr += 48;
 
 	// restore .cryptobuf
 	cryptobuf_adr = fram_ptr + (CKP_EDATA - CKP_EDATA_CONF) + (CKP_EBSS - CKP_EBSS_CONF);
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	if (CY15X102QN_Read(&hspi1, (uint8_t *)CKP_SCRYPTOBUF, CKP_ECRYPTOBUF - CKP_SCRYPTOBUF, cryptobuf_adr) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_SPI_CRYPTO);
+#endif
 
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// restore .data, generate tag
 	if (CY15X102QN_Read(&hspi1, (uint8_t *)CKP_EDATA_CONF, CKP_EDATA - CKP_EDATA_CONF, fram_ptr) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_SPI_DATA);
+#endif
 
-	copy_mem(CKP_EDATA_CONF, (uint32_t)buf_data_after, CKP_EDATA - CKP_EDATA_CONF);
-	copy_mem(CKP_SCRYPTOBUF, (uint32_t)crypto_data_after, CKP_ECRYPTOBUF_DATA - CKP_SCRYPTOBUF);
 
-
-	if (crypto_AuthDecrypt((uint8_t*)CKP_EDATA_CONF, CKP_EDATA - CKP_EDATA_CONF, (uint8_t *)CKP_SCRYPTOBUF, CKP_EDATA_CONF - CKP_SDATA_CONF, (uint8_t *)CKP_SDATA_CONF, &tags_after[0]) != 0) {
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	if (crypto_AuthDecrypt((uint8_t*)CKP_EDATA_CONF, CKP_EDATA - CKP_EDATA_CONF, (uint8_t *)CKP_SCRYPTOBUF, CKP_EDATA_CONF - CKP_SDATA_CONF, (uint8_t *)CKP_SDATA_CONF, &tags[0]) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_AUTH_DATA);
+#endif
+
+
 	pInitVectAES[2] += 1;
 	fram_ptr += (CKP_EDATA - CKP_EDATA_CONF);
 
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	// restore .bss, generate tag
 	if (CY15X102QN_Read(&hspi1, (uint8_t *)CKP_EBSS_CONF, CKP_EBSS - CKP_EBSS_CONF, fram_ptr) != 0) {
 		return -1;
 	}
-	if (crypto_AuthDecrypt((uint8_t*)CKP_EBSS_CONF, CKP_EBSS - CKP_EBSS_CONF, (uint8_t *)CKP_ECRYPTOBUF_DATA, CKP_EBSS_CONF - CKP_SBSS_CONF, (uint8_t *)CKP_SBSS_CONF, &tags_after[4]) != 0) {
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_SPI_BSS);
+#endif
+
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	if (crypto_AuthDecrypt((uint8_t*)CKP_EBSS_CONF, CKP_EBSS - CKP_EBSS_CONF, (uint8_t *)CKP_ECRYPTOBUF_DATA, CKP_EBSS_CONF - CKP_SBSS_CONF, (uint8_t *)CKP_SBSS_CONF, &tags[4]) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_AUTH_BSS);
+#endif
+
 	pInitVectAES[2] += 1;
 	fram_ptr += (CKP_EBSS - CKP_EBSS_CONF);
 
@@ -203,6 +321,9 @@ int32_t restore_ckp_fram(void)
 	updateFramAddr(&fram_addr);
 
 
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	//call function to make space for stack
 	fram_stack_ptr = fram_ptr;
 	restore_sp_fram(stack_len);
@@ -210,22 +331,49 @@ int32_t restore_ckp_fram(void)
 	return 0;
 }
 
+extern int perf_enabled;
+extern uint32_t perf_start;
+extern uint32_t perf_end;
+
 
 int32_t restore_ckp_fram_stack_drivers(void)
 {
+
 	if (CY15X102QN_Read(&hspi1, (uint8_t*)(CKP_ESTACK - stack_len + 1), stack_len, fram_stack_ptr) != 0) {
 		return -1;
 	}
-	if (crypto_AuthDecrypt((uint8_t*)(CKP_ESTACK - stack_len + 1), stack_len, NULL, 0, NULL, &tags_after[8]) != 0) {
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_SPI_STACK);
+#endif
+
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
+	if (crypto_AuthDecrypt((uint8_t*)(CKP_ESTACK - stack_len + 1), stack_len, NULL, 0, NULL, &tags[8]) != 0) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_AUTH_STACK);
+#endif
 
 
-//	 restore driver status
-//	__disable_irq();
-//	copy_mem(CKP_SDATA_CONF, CKP_SDATA, CKP_SDATA_CONF - CKP_SDATA);
-//	copy_mem(CKP_SBSS_CONF, CKP_SBSS, CKP_SBSS_CONF - CKP_SBSS);
-//	__enable_irq();
+
+#if ! MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_TOT1);
+	perf_start = DWT_CNT_NOW; perf_enabled = 1;
+#endif
+
+
+#if MICROBENCHMARK
+	perf_start = DWT_CNT_NOW;
+#endif
+	__disable_irq();
+	copy_mem(CKP_SDATA_CONF, CKP_SDATA, CKP_SDATA_CONF - CKP_SDATA);
+	copy_mem(CKP_SBSS_CONF, CKP_SBSS, CKP_SBSS_CONF - CKP_SBSS);
+	__enable_irq();
+#if MICROBENCHMARK
+	perf_end = DWT_CNT_NOW; dwt_log_time(TM_R_CPY_DRIVERS, DWT_DIFF(perf_end, perf_start));
+#endif
 
 	return 0;
 }
@@ -349,9 +497,15 @@ int32_t crypto_Init(void)
 		return -1;
 	}
 
+#if MICROBENCHMARK
+	DWT_CNT_START;
+#endif
 	if (HAL_CRYPEx_DecryptSharedKey(&hcryp, Encryptedkey, 0, TIMEOUT_VALUE) != HAL_OK) {
 		return -1;
 	}
+#if MICROBENCHMARK
+	DWT_CNT_END; DWT_CNT_LOG(TM_R_DECRYPT_KEY);
+#endif
 
 	if (GCM_AES_Shared_Init() != 0) {
 		return -1;
