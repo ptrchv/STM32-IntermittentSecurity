@@ -181,6 +181,9 @@ Detail of the experiment are in the *ckp_test_perf.c* file.
 If the code work, it ends up in a restore loop, continuously logging the performance metrics of the restoration utility.
 Information on how interpret the logs is found in *ckp_dwt.h*.
 
+The *eval* folder contains the results of our evaluation and the scripts used to elaborate the data.
+See the contained *README* for more information.
+
 ## Caveats
 - *SystemClock_Config()* must be performed at boot in secure world (this should be set automatically when the RNG is configured).
 - External memory
