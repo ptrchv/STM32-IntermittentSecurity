@@ -1,6 +1,8 @@
 /* ...... */
 
 /* Memories definition */
+
+// Change memory definitions
 MEMORY
 {
   RAM	(xrw)	 : ORIGIN = 0x30000000,	LENGTH = 256K    
@@ -11,6 +13,9 @@ MEMORY
 }
 
 /* Sections */
+
+// Either modify or add sections as follows, do not remove any.
+// Sections listed in comments must be kept the same
 SECTIONS
 {
   /*
@@ -22,9 +27,10 @@ SECTIONS
   .preinit_array
   .init_array
   .fini_array
-  ...
   */
-
+  
+  /* ... */
+  
   .data :
   {
     _sdata = .;

@@ -11,8 +11,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 
-// Delete variables related to crypto unit and RNG
-// Change the declaration below
+// Delete all variable declarations and add the two below
 SPI_HandleTypeDef hspi1 DRIVER_BSS;
 UART_HandleTypeDef huart3 DRIVER_BSS;
 
@@ -35,16 +34,18 @@ int main(void)
   // Leave all the rest
   
   /* USER CODE BEGIN 2 */
+  
+  // Add the following code
 
-  // log memory structure information
+  /* log memory structure information */
   dwt_log_time(TM_G_SIZE_DATA, CKP_EDATA - CKP_SDATA);
   dwt_log_time(TM_G_SIZE_BSS, CKP_EBSS - CKP_SBSS);
   dwt_log_time(TM_G_SIZE_DATACONF, CKP_EDATA_CONF - CKP_SDATA_CONF);
   dwt_log_time(TM_G_SIZE_BSSCONF, CKP_EBSS_CONF - CKP_SBSS_CONF);
 
-  dwt_counter_init(); // setup DWT cycle counter
-  crypto_Init();      // configure cryto unit and checkpoint key
-  test_perf();	      // run the performance test
+  dwt_counter_init(); /* setup DWT cycle counter */
+  crypto_Init();      /* configure cryto unit and checkpoint key */
+  test_perf();	      /* run the performance test */
 
   /* USER CODE END 2 */
 

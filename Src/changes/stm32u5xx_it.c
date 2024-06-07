@@ -1,3 +1,5 @@
-/*
-Just comment out the SVC_Handler(void)
-*/
+/* ... */
+
+// Comment out SVC_Handler(void) 
+
+/* ... */

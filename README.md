@@ -41,13 +41,16 @@ The ARDUINO connectors also provide GND and 3.3V power for the memory chip.
 Tie the DNU and WP pins of the memory chip to VDD.
 Tying WP to VDD disables write protection functionalities, which are not required for this project.
 
-The USART3 interface is required for the test.
+The USART3 interface is used for the performance test.
 This is also accessible from the ARDUINO connectors.
-This will be configured and used as a UART interface,to log the measured clock cycles.
+The interface will be configured and used as a UART interface, to log the measured clock cycles.
 
 ## Software
 The solution was developed using [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html), therefore instruction are provided for this development enviroment.
 Copyrighted code by STMicroelectronics is not included in this repository, but this can be generated via either [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) (described in this guide) or [STM32CubeMX](https://www.st.com/en/development-tools/stm32cubemx.html).
+
+Before starting, create an account on the [STMicroelectronics website](https://www.st.com) and use to log in from the [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html).
+This is possibile from the *myST* menu in the top bar.
 
 
 ### Board configuration
@@ -95,8 +98,8 @@ The memory was limited to 20MHz, since it is the maximum stable frequency for ou
 - First bit -> *MSB First* 
 - Prescaler -> *8* (to achieve a 20 Mbit/s baud rate)
 - Configure SPI mode 0:
-  - Clock Polarity (CPOL) -> *0* (idle low)
-  - Clock Phase (CPHA) -> *0* (edge one of clock, raising or falling depends on polarity)
+  - Clock Polarity (CPOL) -> *Low* (idle low)
+  - Clock Phase (CPHA) -> *1 Edge* (edge one of clock, raising or falling depends on polarity)
 - NSSP Mode -> *disabled* (no chip select pulses in between data frames, [ref](https://www.st.com/content/ccc/resource/training/technical/product_training/group0/3e/ee/cd/b7/84/4b/45/ee/STM32F7_Peripheral_SPI/files/STM32F7_Peripheral_SPI.pdf/_jcr_content/translations/en.STM32F7_Peripheral_SPI.pdf))
 - *Leave others as default*
 
@@ -160,14 +163,17 @@ Copy the content of the *Src* folder, **EXCEPT** the *changes* sub-folder, insid
 The *changes* sub-folder contains files that are already in the project and need to be modified.
 Perform the modifications as explained in the files.
 
-The *FLASH.ld* file contains the modification to be performed to the linker script of the secure project.
+The *FLASH.ld* file explains the modifications to be performed in the linker script of the secure project.
 Perform these modifications.
 
 ### Build and run
 To build both images, right-click on the non-secure project and select *Build Project*.
 
-Once the images are build, create a new debug configuration, selecting as the main image the secure image (this must be the first to run).
-Then, in the startup section of the debug configuration menu, click on *add* and select the non-secure image.
+Once the images are build, create a new debug configuration for the project.
+To do this, right-click on the Secure project, then select *Debug as*, and finally *STM32 C/C++ Application*.
+A new window should appear with a new debug configuration of the secure image.
+In the *startup* section of the debug configuration, click on *add* and select the non-secure image.
+Leave all the default options.
 
 ## Testing
 All testing code is run in secure world the jump to non-secure.
