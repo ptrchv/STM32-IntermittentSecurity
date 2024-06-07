@@ -171,6 +171,7 @@ To build both images, right-click on the non-secure project and select *Build Pr
 
 Once the images are build, create a new debug configuration for the project.
 To do this, right-click on the Secure project, then select *Debug as*, and finally *STM32 C/C++ Application*.
+
 A new window should appear with a new debug configuration of the secure image.
 In the *startup* section of the debug configuration, click on *add* and select the non-secure image.
 Leave all the default options.
