@@ -32,6 +32,7 @@ The following hardware is required to build and test the prototype:
 - [B-U585I-IOT02A Discovery kit](https://www.st.com/en/evaluation-tools/b-u585i-iot02a.html)
 - [CY15B102QN-50PZXI](https://www.infineon.com/cms/en/product/memories/f-ram-ferroelectric-ram/excelon-f-ram/cy15b102qn-50pzxi/) (3.3V and  8-pin DIP version)
 - Breadboard and jumpers
+- UART-to-USB cable
 
 Position the memory chip on the breadboard and connect it via jumper cables to the SPI1 interface of the development board.
 The interface is accessible from the ARDUINO connectors on the back of the board.
@@ -44,6 +45,7 @@ Tying WP to VDD disables write protection functionalities, which are not require
 The USART3 interface is used for the performance test.
 This is also accessible from the ARDUINO connectors.
 The interface will be configured and used as a UART interface, to log the measured clock cycles.
+To read the UART interface, a UART-to-USB cable can be used (we had problems with our cable so we connected an external board).
 
 ## Software
 The solution was developed using [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html), therefore instruction are provided for this development enviroment.
@@ -176,8 +178,10 @@ A new window should appear with a new debug configuration of the secure image.
 In the *startup* section of the debug configuration, click on *add* and select the non-secure image.
 Leave all the default options.
 
+Now it is possibile to start the debug session.
+
 ## Testing
-All testing code is run in secure world the jump to non-secure.
+All testing code is run in secure world before the jump to non-secure.
 
 In the *ckp_test.h*, via defines, it is possible to select whether to run the overall test or the microbenchmark, which logs the time for the single operations.
 
